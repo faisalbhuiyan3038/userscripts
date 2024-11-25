@@ -1,19 +1,19 @@
 // ==UserScript==
-// @name         Search Switcher FB
+// @name         Instant Search Switcher
 // @namespace    http://tampermonkey.net/
-// @version      2024-09-08
-// @description  switches search engine from google to other sites
+// @version      1.2
+// @description  Changes search engine from one site to another without deleting search query.
 // @author       Faisal Bhuiyan
 // @match              *://*.bing.com/*search*
 // @match        https://www.google.com/search*
 // @match        https://www.qwant.com/*
 // @match              *://yandex.com/*search*
-// @match              *://search.brave.com/*
+// @match              *://search.brave.com/*search*
 // @license      MIT
 // @grant        none
 // ==/UserScript==
 
-(function() {
+(function () {
     'use strict';
 
     const searchEngines = [
@@ -51,6 +51,11 @@
             name: 'Phind',
             url: 'https://www.phind.com/search',
             param: 'q'
+        },
+        {
+            name: 'Morphic',
+            url: 'https://morphic.sh/search',
+            param: 'q'
         }
     ];
 
@@ -59,19 +64,37 @@
     selectBox.style.position = 'fixed';
     selectBox.style.top = '20px';
     selectBox.style.right = '5rem';
-    selectBox.style.zIndex = '9999'; // Ensures it's above other elements
+    selectBox.style.zIndex = '9999';
     selectBox.style.fontSize = '16px';
     selectBox.style.padding = '5px';
     selectBox.style.borderRadius = '4px';
     selectBox.style.backgroundColor = '#fff';
+    selectBox.style.color = '#000'; // Force black text
     selectBox.style.boxShadow = '0 2px 5px rgba(0, 0, 0, 0.1)';
+
+    // Add CSS to ensure text remains visible in both light and dark themes
+    const style = document.createElement('style');
+    style.textContent = `
+        .search-switcher-select {
+            color: #000 !important;
+            -webkit-text-fill-color: #000 !important;
+        }
+        .search-switcher-select option {
+            background-color: #fff !important;
+            color: #000 !important;
+            -webkit-text-fill-color: #000 !important;
+        }
+    `;
+    document.head.appendChild(style);
+
+    selectBox.className = 'search-switcher-select';
 
     // Add an empty option as the first element
     const emptyOption = document.createElement('option');
     emptyOption.value = '';
     emptyOption.textContent = 'Select';
-    emptyOption.disabled = true; // Make it unselectable after initial choice
-    emptyOption.selected = true; // Make it the default option
+    emptyOption.disabled = true;
+    emptyOption.selected = true;
     selectBox.appendChild(emptyOption);
 
     // Add search engines to the select box
@@ -87,7 +110,7 @@
 
     // Detect changes to the select box
     selectBox.addEventListener('change', () => {
-        const selectedEngine = searchEngines[selectBox.selectedIndex - 1]; // Adjusted index
+        const selectedEngine = searchEngines[selectBox.selectedIndex - 1];
         const currentQuery = new URLSearchParams(window.location.search).get('q');
         if (currentQuery && selectedEngine) {
             window.location.href = `${selectedEngine.url}?${selectedEngine.param}=${encodeURIComponent(currentQuery)}`;
