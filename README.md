@@ -1,5 +1,5 @@
 # Personal Userscripts Collection
-[Instant Search Switcher](https://greasyfork.org/en/scripts/518797-instant-search-switcher) - [Android Double Tap to Seek](https://greasyfork.org/en/scripts/518800-android-double-tap-to-seek-video)
+[Instant Search Switcher](https://greasyfork.org/en/scripts/518797-instant-search-switcher) - [Android Double Tap to Seek](https://greasyfork.org/en/scripts/518800-android-double-tap-to-seek-video) - [Arc-Style Site Search](https://greasyfork.org/en/scripts/your-script-id)
 
 A collection of browser userscripts created for personal use, designed to enhance web browsing experience. These scripts are compatible with userscript managers like Tampermonkey.
 
@@ -7,50 +7,75 @@ If you are on any Android phone, you can use these with Firefox Android (Highly 
 
 ## Available Scripts
 
-### - Site Search for Arc Browser
+### 1. Arc-Style Site Search
 
-Enables quick search shortcuts that work on any website with a search box. Type a shortcut followed by your search query to instantly redirect to that search engine.
+A userscript that brings Arc browser's quick site search functionality to any browser. Use shortcuts like `@perplexity` to instantly search on your favorite sites.
 
 #### Features
-- Supported search engines and shortcuts:
-  - Perplexity (@perplexity)
-  - Brave Search (@brave)
-  - YouTube (@youtube)
-  - Morphic (@morphic)
-  - Qwant (@qwant)
-  - Phind (@phind)
-  - Yandex (@yandex)
+- Instant redirection to search results
+- Multiple search engines support
+- Easy to customize and extend
+
+#### Supported Search Engines
+| Shortcut | Site |
+|----------|------|
+| @perplexity | Perplexity AI |
+| @g | Google |
+| @youtube | YouTube |
+| @morphic | Morphic |
+| @qwant | Qwant |
+| @phind | Phind |
+| @yandex | Yandex |
 
 #### Usage
-1. Install the userscript in your browser's userscript manager (e.g., Tampermonkey)
-2. In your address bar, type a shortcut followed by your search query
-3. The script will instantly redirect you to the corresponding search engine
+1. Install a userscript manager (like Tampermonkey)
+2. Install this userscript
+3. In any search box, type a shortcut followed by your search query
+   - Example: `@perplexity how to make pasta`
+   - Example: `@youtube funny cats`
+   - Example: `@phind javascript arrays`
 
-Example:
-- Type "@perplexity how to code" → Redirects to Perplexity AI
-- Type "@brave latest news" → Redirects to Brave Search
-- Type "@youtube cooking tutorial" → Redirects to YouTube
+The script will instantly redirect you to the corresponding search engine with your query.
 
-#### Adding Custom Search Engines
-1. Open the userscript in your userscript manager
+#### Customization
+
+##### Adding a New Search Engine
+1. Open the userscript
 2. Find the `searchEngines` array
 3. Add a new entry following this format:
 ```javascript
 {
-    shortcut: '@yourshortcut',
+    shortcut: '@example',
     url: 'https://example.com/search?q=%s'
 }
 ```
-4. Replace:
-   - `@yourshortcut` with your preferred shortcut (e.g., '@ddg' for DuckDuckGo)
-   - The URL with the search engine's URL, keeping `%s` where the search query should go
+4. Add the domain to the `searchDomains` Set:
+```javascript
+const searchDomains = new Set([
+    'example.com',
+    // other domains...
+]);
+```
 
-Tips:
-- To find the correct search URL, perform a search on your desired site and copy the URL
-- Replace your search terms in the URL with `%s`
-- Make sure your shortcut is unique and starts with '@'
+##### Removing a Search Engine
+1. Remove its entry from the `searchEngines` array
+2. Remove its domain from the `searchDomains` Set
 
-### - Android Double Tap to Seek
+#### Important Note About Default Search Engines
+⚠️ **Do not add your browser's default search engine** to the script. This can cause redirect loops because:
+1. When you search, your browser first redirects to your default search engine
+2. The script then tries to redirect from there
+3. This creates a conflict and breaks the functionality
+
+For example, if you use Brave Search as your default search engine, don't add the `@brave` shortcut to the script.
+
+#### Query Parameter Support
+The script supports various search query parameters:
+- `q` (most search engines)
+- `search_query` (YouTube)
+- `text` (Yandex)
+
+### 2. Android Double Tap to Seek
 
 Adds double-tap-to-seek functionality to web video players that don't natively support this feature.
 
@@ -63,7 +88,7 @@ Adds double-tap-to-seek functionality to web video players that don't natively s
   - Firefox for Android with Tampermonkey
   - Kiwi Browser with Tampermonkey
 
-### - Instant Search Switcher
+### 3. Instant Search Switcher
 
 Adds a convenient dropdown menu to switch between different search engines while preserving your search query.
 
