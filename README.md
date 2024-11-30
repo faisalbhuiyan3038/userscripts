@@ -1,5 +1,5 @@
 # Personal Userscripts Collection
-[Instant Search Switcher](https://greasyfork.org/en/scripts/518797-instant-search-switcher) - [Android Double Tap to Seek](https://greasyfork.org/en/scripts/518800-android-double-tap-to-seek-video) - [Arc-Style Site Search](https://greasyfork.org/en/scripts/your-script-id)
+[Instant Search Switcher](https://greasyfork.org/en/scripts/518797-instant-search-switcher) - [Android Double Tap to Seek](https://greasyfork.org/en/scripts/518800-android-double-tap-to-seek-video) - [Site Search for Arc Browser](https://greasyfork.org/en/scripts/519344-site-search-for-arc-browser) - [Site Search for Arc Browser for Google](https://greasyfork.org/en/scripts/519347-site-search-for-arc-browser-for-google-users)
 
 A collection of browser userscripts created for personal use, designed to enhance web browsing experience. These scripts are compatible with userscript managers like Tampermonkey.
 
@@ -9,7 +9,7 @@ If you are on any Android phone, you can use these with Firefox Android (Highly 
 
 ### 1. Arc-Style Site Search
 
-A userscript that brings Arc browser's quick site search functionality to any browser. Use shortcuts like `@perplexity` to instantly search on your favorite sites.
+A userscript that 'fixes' site search functionality in Arc Browser. Use shortcuts like `@perplexity` from the address bar directly to instantly search on your favorite sites. Why does this exist? Well, while the feature works perfectly on macOS, it's widely known that site search just does not work on Arc for Windows. So, decided to fix it.
 
 #### Features
 - Instant redirection to search results
