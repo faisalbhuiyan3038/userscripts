@@ -1,5 +1,5 @@
 # Personal Userscripts Collection
-[Instant Search Switcher](https://greasyfork.org/en/scripts/518797-instant-search-switcher) - [Android Double Tap to Seek](https://greasyfork.org/en/scripts/518800-android-double-tap-to-seek-video) - [Site Search for Arc Browser](https://greasyfork.org/en/scripts/519344-site-search-for-arc-browser) - [Site Search for Arc Browser for Google](https://greasyfork.org/en/scripts/519347-site-search-for-arc-browser-for-google-users)
+[Instant Search Switcher](https://greasyfork.org/en/scripts/518797-instant-search-switcher) - [Android Double Tap to Seek](https://greasyfork.org/en/scripts/518800-android-double-tap-to-seek-video) - [Site Search for Arc Browser](https://greasyfork.org/en/scripts/519344-site-search-for-arc-browser) - [Site Search for Arc Browser for Google](https://greasyfork.org/en/scripts/519347-site-search-for-arc-browser-for-google-users) - [Universal Video Sharpness Filter](https://greasyfork.org/en/scripts/521383-universal-video-sharpener) - [Universal Video Sharpness CSS Filter](https://greasyfork.org/en/scripts/521382-universal-video-sharpener-css-filter)
 
 A collection of browser userscripts created for personal use, designed to enhance web browsing experience. These scripts are compatible with userscript managers like Tampermonkey.
 
@@ -7,7 +7,16 @@ If you are on any Android phone, you can use these with Firefox Android (Highly 
 
 ## Available Scripts
 
-### 1. Arc-Style Site Search
+### Universal Video Sharpness Filter
+
+A userscript that sharpens videos across any number of streaming sites. This applies a sharpening filter using SVG filters and CSS. It also slightly adjusts the contrast and brightness to maintain overall video quality.
+
+In my testing, this one seems to lag on Firefox, but works well on Microsoft Edge. This script was inspired by [Youtube Video Sharpener](https://greasyfork.org/en/scripts/499365-youtube-sharpness-enhancer) script.
+
+### Universal Video Sharpness CSS Filter
+A userscript that applies a sharpening effect to videos by applying CSS filters. The effect is less noticable compared to the SVG filter method, but consumes less resources and works fine on all browsers.
+
+### Arc-Style Site Search
 
 A userscript that 'fixes' site search functionality in Arc Browser. Use shortcuts like `@perplexity` from the address bar directly to instantly search on your favorite sites. Why does this exist? Well, while the feature works perfectly on macOS, it's widely known that site search just does not work on Arc for Windows. So, decided to fix it.
 
@@ -75,7 +84,7 @@ The script supports various search query parameters:
 - `search_query` (YouTube)
 - `text` (Yandex)
 
-### 2. Android Double Tap to Seek
+### Android Double Tap to Seek
 
 Adds double-tap-to-seek functionality to web video players that don't natively support this feature.
 
