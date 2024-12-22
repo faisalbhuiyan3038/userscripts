@@ -13,8 +13,12 @@ A userscript that sharpens videos across any number of streaming sites. This app
 
 In my testing, this one seems to lag on Firefox, but works well on Microsoft Edge. This script was inspired by [Youtube Video Sharpener](https://greasyfork.org/en/scripts/499365-youtube-sharpness-enhancer) script.
 
+UPDATE1: Added a visible indicator (✓ or ✗) for when sharpening is enabled or disabled and a notification when state changes.
+
 ### Universal Video Sharpness CSS Filter
 A userscript that applies a sharpening effect to videos by applying CSS filters. The effect is less noticable compared to the SVG filter method, but consumes less resources and works fine on all browsers.
+
+UPDATE1: Added a visible indicator (✓ or ✗) for when sharpening is enabled or disabled and a notification when state changes.
 
 ### Arc-Style Site Search
 
