@@ -1,16 +1,20 @@
 // ==UserScript==
 // @name         Instant Search Switcher
 // @namespace    http://tampermonkey.net/
-// @version      1.2
+// @version      1.4
 // @description  Changes search engine from one site to another without deleting search query.
 // @author       Faisal Bhuiyan
 // @match              *://*.bing.com/*search*
+// @match              *://*.bing.com/chat*
 // @match        https://www.google.com/search*
 // @match        https://www.qwant.com/*
 // @match              *://yandex.com/*search*
 // @match              *://search.brave.com/*search*
+// @match              *://duckduckgo.com/*
 // @license      MIT
 // @grant        none
+// @downloadURL https://update.greasyfork.org/scripts/518797/Instant%20Search%20Switcher.user.js
+// @updateURL https://update.greasyfork.org/scripts/518797/Instant%20Search%20Switcher.meta.js
 // ==/UserScript==
 
 (function () {
@@ -26,6 +30,12 @@
             name: 'Bing',
             url: 'https://www.bing.com/search',
             param: 'q'
+        },
+        {
+            name: 'Copilot',
+            url: 'https://www.bing.com/chat',
+            param: 'q',
+            additionalParams: '&sendquery=1&FORM=SCCODX'
         },
         {
             name: 'Qwant',
@@ -55,6 +65,11 @@
         {
             name: 'Morphic',
             url: 'https://morphic.sh/search',
+            param: 'q'
+        },
+        {
+            name: 'DuckDuckGo',
+            url: 'https://duckduckgo.com/',
             param: 'q'
         }
     ];
@@ -111,9 +126,13 @@
     // Detect changes to the select box
     selectBox.addEventListener('change', () => {
         const selectedEngine = searchEngines[selectBox.selectedIndex - 1];
-        const currentQuery = new URLSearchParams(window.location.search).get('q');
+        // Try to get query parameter from either 'q' or 'text' depending on current search engine
+        const currentQuery = new URLSearchParams(window.location.search).get('q') ||
+                           new URLSearchParams(window.location.search).get('text');
+
         if (currentQuery && selectedEngine) {
-            window.location.href = `${selectedEngine.url}?${selectedEngine.param}=${encodeURIComponent(currentQuery)}`;
+            const additionalParams = selectedEngine.additionalParams || '';
+            window.location.href = `${selectedEngine.url}?${selectedEngine.param}=${encodeURIComponent(currentQuery)}${additionalParams}`;
         }
     });
 })();

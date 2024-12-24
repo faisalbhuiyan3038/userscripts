@@ -118,10 +118,12 @@ Adds a convenient dropdown menu to switch between different search engines while
   - Morphic
   - Perplexity
   - Phind
+  - DuckDuckGo
 - Currently works on:
   - Google
   - Brave
   - Bing search pages
+  - DuckDuckGo
 - Easily extensible: Add more search engines by modifying the userscript
 
 ## Installation
