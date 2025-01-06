@@ -1,11 +1,16 @@
 # Personal Userscripts Collection
-[Instant Search Switcher](https://greasyfork.org/en/scripts/518797-instant-search-switcher) - [Android Double Tap to Seek](https://greasyfork.org/en/scripts/518800-android-double-tap-to-seek-video) - [Site Search for Arc Browser](https://greasyfork.org/en/scripts/519344-site-search-for-arc-browser) - [Site Search for Arc Browser for Google](https://greasyfork.org/en/scripts/519347-site-search-for-arc-browser-for-google-users) - [Universal Video Sharpness Filter](https://greasyfork.org/en/scripts/521383-universal-video-sharpener) - [Universal Video Sharpness CSS Filter](https://greasyfork.org/en/scripts/521382-universal-video-sharpener-css-filter) - [Android Swipe to Seek Video](https://greasyfork.org/en/scripts/521474-android-swipe-to-seek-video)
+[Instant Search Switcher](https://greasyfork.org/en/scripts/518797-instant-search-switcher) - [Android Double Tap to Seek](https://greasyfork.org/en/scripts/518800-android-double-tap-to-seek-video) - [Site Search for Arc Browser](https://greasyfork.org/en/scripts/519344-site-search-for-arc-browser) - [Site Search for Arc Browser for Google](https://greasyfork.org/en/scripts/519347-site-search-for-arc-browser-for-google-users) - [Universal Video Sharpness Filter](https://greasyfork.org/en/scripts/521383-universal-video-sharpener) - [Universal Video Sharpness CSS Filter](https://greasyfork.org/en/scripts/521382-universal-video-sharpener-css-filter) - [Android Swipe to Seek Video](https://greasyfork.org/en/scripts/521474-android-swipe-to-seek-video) - [Brave Search Default for Opera](https://greasyfork.org/en/scripts/522992-brave-search-default-for-opera)
 
 A collection of browser userscripts created for personal use, designed to enhance web browsing experience. These scripts are compatible with userscript managers like Tampermonkey.
 
 If you are on any Android phone, you can use these with Firefox Android (Highly Recommend), Kiwi Browser, Microsoft Edge Canary, Lemur Browser and Quetta Browser.
 
 ## Available Scripts
+
+### Brave Search Default for Opera
+A userscript that sets Brave Search as the default search engine for Opera. You can modify it to set any other search engine as the default.
+
+Simply, change the url and name in the config section of the script. This works by auto redirecting with optimizations to ensure the actual default search engine never shows up.
 
 ### Android Swipe to Seek Video
 
