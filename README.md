@@ -1,5 +1,5 @@
 # Personal Userscripts Collection
-[Instant Search Switcher](https://greasyfork.org/en/scripts/518797-instant-search-switcher) - [Android Double Tap to Seek](https://greasyfork.org/en/scripts/518800-android-double-tap-to-seek-video) - [Site Search for Arc Browser](https://greasyfork.org/en/scripts/519344-site-search-for-arc-browser) - [Site Search for Arc Browser for Google](https://greasyfork.org/en/scripts/519347-site-search-for-arc-browser-for-google-users) - [Universal Video Sharpness Filter](https://greasyfork.org/en/scripts/521383-universal-video-sharpener) - [Universal Video Sharpness CSS Filter](https://greasyfork.org/en/scripts/521382-universal-video-sharpener-css-filter) - [Android Swipe to Seek Video](https://greasyfork.org/en/scripts/521474-android-swipe-to-seek-video) - [Brave Search Default for Opera](https://greasyfork.org/en/scripts/522992-brave-search-default-for-opera)
+[Click here to visit my GreasyFork profile and see all the userscripts I created](https://greasyfork.org/en/users/1402168-faisalbhuiyan3038)
 
 A collection of browser userscripts created for personal use, designed to enhance web browsing experience. These scripts are compatible with userscript managers like Tampermonkey.
 
@@ -7,10 +7,21 @@ If you are on any Android phone, you can use these with Firefox Android (Highly 
 
 ## Available Scripts
 
+### Stream to Android Player
+What does this userscript do?
+It detects streaming m3u8 or mp4 videos on the current site and if found will show a small play icon on the bottom right corner. When you tap it, you can find the list of detected streams. Clicking on each stream will open Android's native sharing menu where you can choose the app you want to open the video in. That's it! You can watch them in your favorite player with all the features the app supports like audio equalizer, swipe to seek etc.
+
+Which video players are supported?
+Any video player that supports opening streaming links will work. I tested with mpv and SVPlayer.
+
+The streaming isn't detected on EVERY site, just some sites I use. If there are issues, leave a feedback and I will take a look at it when I am free.
+
+This is available as an Edge and Firefox extension too.
+
 ### Brave Search Default for Opera
 A userscript that sets Brave Search as the default search engine for Opera. You can modify it to set any other search engine as the default.
 
-Simply, change the url and name in the config section of the script. This works by auto redirecting with optimizations to ensure the actual default search engine never shows up.
+Simply, change the url and name in the config section of the script. This works by auto redirecting Yahoor searches with optimizations to ensure the actual default search engine never shows up. As a result, you need to set Yahoor as your default search engine in your browser settings for this to work.
 
 ### Android Swipe to Seek Video
 
