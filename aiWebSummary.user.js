@@ -1,17 +1,21 @@
 // ==UserScript==
 // @name         AI Web Summarizer
 // @namespace    http://tampermonkey.net/
-// @version      0.2
-// @description  Floating AI summarizer button for web pages
+// @version      0.8
+// @description  Floating AI summarizer button for web pages with custom prompts, draggable UI, and Readability.js integration. Fixed for Android Chromium.
 // @author       Faisal Bhuiyan
 // @match        *://*/*
 // @grant        GM_setClipboard
 // @grant        GM_getValue
 // @grant        GM_setValue
 // @grant        GM_addStyle
+// @connect      cdn.jsdelivr.net
+// @grant        GM_xmlhttpRequest
+// @downloadURL https://update.greasyfork.org/scripts/552038/AI%20Web%20Summarizer.user.js
+// @updateURL https://update.greasyfork.org/scripts/552038/AI%20Web%20Summarizer.meta.js
 // ==/UserScript==
 
-(function() {
+(function () {
     'use strict';
 
     // Default Chatbots
@@ -29,7 +33,7 @@
     const DEFAULT_PROMPTS = [
         { id: 'summary', name: 'Summary - Short', content: `Please summarize the following text in under 100 words.\nInstructions\n1. The summary should be well formatted and easily scannable.\n2. Don't start the text with "Let me...", or "Here is the summary...". Just give the results.\n3. Please keep it SHORT, no more than 100 words!`, isDefault: true },
         { id: '5-10-points', name: '5-10 Key Points - Short', content: `Please provide the 5-10 most important points from the text.\nUse bullet points and emojis to break up the text.` },
-        { id: 'key-points-summary', name: 'Summary with Key Points & Takeaways - Detailed', content: `Please provide a summary of the following content in its original tone:\n1. First, give a concise one-sentence summary that captures the core message/theme\n2. Then, share a breakdown of the main topics discussed. For each topic:\n    - Expound very briefly on what was discussed on each topic\n    - Include any notable quotes or statistics if any.\n3. End with a brief takeaways\n4. Don't go beyond 200 words.\n5. Don't start the text with "Let me...", or "Here is the summary...". Just give the results.` },
+        { id: 'key-points-summary', name: 'Summary with Key Points & Takeaways - Detailed', content: `Please provide a summary of the following content in its original tone:\n1. First, give a concise one-sentence summary that captures the core message/theme\n2. Then, share a breakdown of the main topics discussed. For each topic:\n   - Expound very briefly on what was discussed on each topic\n   - Include any notable quotes or statistics if any.\n3. End with a brief takeaways\n4. Don't go beyond 200 words.\n5. Don't start the text with "Let me...", or "Here is the summary...". Just give the results.` },
         { id: 'short-form', name: 'Blinkist-Like Summary - Detailed', content: `Summarize the following content how Blinkist would.\nKeep the tone of the content. Keep it conversational.\nBreak the headers using relevant dynamic emojis.\nGo beyond the title in giving the summary, look through entire content.\nSprinkle in quotes or excerpts to better link the summary to the content.\nFor less than 30 mins long content, don't go beyond 150 words.\nFor 1hr+ long content don't go beyond 300 words.\nDon't start the text with "Let me...", or "Here is the summary...". Just give the results.` }
     ];
 
@@ -41,6 +45,9 @@
         minChunksPerSegment: 3
     };
 
+    // State Variables
+    let isBusy = false; // Prevents double execution crashes
+
     // Storage Helpers
     function getStored(key, defaultVal) {
         return GM_getValue(key, defaultVal);
@@ -51,11 +58,13 @@
     }
 
     // Initialize storage
+    if (getStored('buttonBottom') === undefined) setStored('buttonBottom', '80px');
     if (!getStored('selectedBotId')) setStored('selectedBotId', 'chatgpt');
     if (!getStored('selectedPromptId')) setStored('selectedPromptId', 'summary');
     if (!getStored('excludedSites')) setStored('excludedSites', []);
     if (!getStored('customChatbots')) setStored('customChatbots', {});
     if (!getStored('customPrompts')) setStored('customPrompts', []);
+    if (!getStored('useReadability')) setStored('useReadability', false);
 
     // Get all chatbots (default + custom)
     function getAllChatbots() {
@@ -76,12 +85,13 @@
 
     // Styles with namespacing
     GM_addStyle(`
+        @keyframes spin { 100% { transform: rotate(360deg); } }
         #jsTLDR-container {
             position: fixed !important;
-            bottom: 80px !important;
             right: 0 !important;
             z-index: 2147483647 !important;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+            touch-action: none !important; /* Important for preventing browser zoom/scroll while dragging */
         }
         #jsTLDR-main-button {
             width: 40px !important;
@@ -91,7 +101,7 @@
             backdrop-filter: blur(10px) !important;
             border-radius: 16px 0 0 16px !important;
             border: none !important;
-            cursor: pointer !important;
+            cursor: grab !important;
             transition: all 0.2s !important;
             box-shadow: 0 4px 12px rgba(0,0,0,0.1) !important;
             display: flex !important;
@@ -100,6 +110,8 @@
             font-size: 20px !important;
             padding: 0 !important;
             margin: 0 !important;
+            user-select: none !important;
+            -webkit-user-select: none !important;
         }
         #jsTLDR-main-button:hover {
             opacity: 1 !important;
@@ -188,8 +200,6 @@
             font-size: 12px !important;
             margin-left: 8px !important;
         }
-
-        /* Modal Styles */
         .jsTLDR-modal-overlay {
             position: fixed !important;
             top: 0 !important;
@@ -211,11 +221,13 @@
             border-radius: 12px !important;
             width: 100% !important;
             max-width: 600px !important;
-            max-height: 80vh !important;
+            max-height: 90vh !important;
             overflow-y: auto !important;
             box-shadow: 0 20px 60px rgba(0,0,0,0.4) !important;
             padding: 0 !important;
             margin: 0 !important;
+            display: flex;
+            flex-direction: column;
         }
         .jsTLDR-modal-header {
             padding: 20px 24px !important;
@@ -246,6 +258,22 @@
         }
         .jsTLDR-modal-body {
             padding: 24px !important;
+            overflow-y: auto;
+        }
+        #jsTLDR-custom-prompt-modal-body {
+             display: flex;
+             flex-direction: column;
+             gap: 16px;
+        }
+        #jsTLDR-custom-prompt-textarea {
+            height: 150px;
+        }
+        #jsTLDR-custom-prompt-modal-footer {
+            padding: 16px 24px !important;
+            border-top: 1px solid ${isDarkMode() ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'} !important;
+            display: flex;
+            justify-content: flex-end;
+            gap: 12px;
         }
         .jsTLDR-tabs {
             display: flex !important;
@@ -331,15 +359,23 @@
         }
         .jsTLDR-list-item-content {
             flex: 1 !important;
+            overflow: hidden;
+            padding-right: 10px;
         }
         .jsTLDR-list-item-title {
             font-weight: 500 !important;
             color: ${isDarkMode() ? '#fff' : '#000'} !important;
             margin-bottom: 2px !important;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
         .jsTLDR-list-item-subtitle {
             font-size: 12px !important;
             color: ${isDarkMode() ? '#999' : '#666'} !important;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
         .jsTLDR-list-item-actions {
             display: flex !important;
@@ -361,13 +397,85 @@
             background: #dc2626 !important;
             color: #fff !important;
         }
-
+        #jsTLDR-toast {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: #323232;
+            color: #fff;
+            padding: 10px 20px;
+            border-radius: 8px;
+            z-index: 2147483647;
+            font-size: 14px;
+            opacity: 0;
+            transition: opacity 0.3s, bottom 0.3s;
+        }
+        #jsTLDR-toast.jsTLDR-show {
+            opacity: 1;
+            bottom: 30px;
+        }
+        .jsTLDR-setting-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 0;
+            border-bottom: 1px solid ${isDarkMode() ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'};
+        }
+        .jsTLDR-setting-label {
+             color: ${isDarkMode() ? '#eee' : '#111'};
+        }
+        .jsTLDR-setting-desc {
+            font-size: 12px;
+            color: #888;
+        }
+        .jsTLDR-switch {
+            position: relative;
+            display: inline-block;
+            width: 44px;
+            height: 24px;
+        }
+        .jsTLDR-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        .jsTLDR-slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: .4s;
+            border-radius: 24px;
+        }
+        .jsTLDR-slider:before {
+            position: absolute;
+            content: "";
+            height: 18px;
+            width: 18px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+        input:checked + .jsTLDR-slider {
+            background-color: #2563eb;
+        }
+        input:checked + .jsTLDR-slider:before {
+            transform: translateX(20px);
+        }
         @media (max-width: 640px) {
             .jsTLDR-modal {
+                width: 100vw !important;
+                height: 100vh !important;
                 max-width: 100% !important;
+                max-height: 100% !important;
                 margin: 0 !important;
                 border-radius: 0 !important;
-                max-height: 100vh !important;
             }
             .jsTLDR-dropdown {
                 width: 200px !important;
@@ -375,17 +483,73 @@
         }
     `);
 
+    // --- Start Readability.js Integration ---
+    let readabilityScriptLoaded = false;
+
+    function loadReadabilityScript() {
+        return new Promise((resolve, reject) => {
+            if (readabilityScriptLoaded) {
+                resolve();
+                return;
+            }
+            GM_xmlhttpRequest({
+                method: "GET",
+                url: "https://cdn.jsdelivr.net/npm/@mozilla/readability@0.5.0/Readability.js",
+                onload: function (response) {
+                    if (response.status === 200) {
+                        const script = document.createElement('script');
+                        script.innerHTML = response.responseText;
+                        document.head.appendChild(script);
+                        readabilityScriptLoaded = true;
+                        resolve();
+                    } else {
+                        reject('Failed to load Readability script');
+                    }
+                },
+                onerror: function (error) {
+                    reject('Error loading Readability script: ' + error);
+                }
+            });
+        });
+    }
+    // --- End Readability.js Integration ---
+
     // Extract Page Content
     async function extractPageContent() {
-        const ignore = 'nav, aside, header, footer, button, script, style';
-        const targets = ['h1','h2','h3','h4','h5','h6','p','li','td','div:not(:empty)']
+        const useReadability = getStored('useReadability', false);
+
+        if (useReadability) {
+            try {
+                await loadReadabilityScript();
+                const documentClone = document.cloneNode(true);
+                const reader = new Readability(documentClone);
+                const article = reader.parse();
+                if (article && article.textContent) {
+                    let content = article.textContent.trim();
+                    content = content.replace(/[ \t]+/g, ' ');
+                    content = content.replace(/\n{3,}/g, '\n\n');
+                    return article.title + "\n\n" + content;
+                }
+            } catch (error) {
+                console.error("Readability extraction failed, falling back to default.", error);
+                showToast("Advanced extraction failed.");
+            }
+        }
+
+        const ignore = 'nav, aside, header, footer, button, script, style, form, fieldset, legend, #jsTLDR-container, #jsTLDR-toast, .jsTLDR-modal-overlay';
+        const targets = ['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'li', 'td', 'article', 'section', 'div:not(:empty)']
             .map(tag => `${tag}:not(${ignore}):not(${ignore} *)`).join(', ');
-        const els = document.querySelectorAll(targets);
+        const els = Array.from(document.querySelectorAll(targets));
         let content = '';
+
         for (const el of els) {
             if (el.offsetHeight === 0 || el.closest(ignore) || !el.textContent?.trim()) continue;
+
             const parent = el.parentElement;
-            if (parent && (parent.matches('h1,h2,h3,h4,h5,h6,div,span,p,li') || parent.closest('h1,h2,h3,h4,h5,h6,div,span,p,li'))) continue;
+            if (parent && (parent.matches(targets) || parent.closest(targets))) {
+                if (parent.closest(targets) !== el) continue;
+            }
+
             let text = el.innerText.trim().replace(/<[^>]+>/g, '').trim();
             if (!text) continue;
             switch (el.tagName.toLowerCase()) {
@@ -397,10 +561,10 @@
                 default: content += `${text}\n`;
             }
         }
-        return content.replace(/\n{2,}/g, '\n');
+        return content.replace(/\n{2,}/g, '\n').trim();
     }
 
-    // Truncation Helpers
+
     function chunkText(text, size) {
         const chunks = [];
         let start = 0;
@@ -476,38 +640,91 @@
                 }
             }
         }
-        return samples.join('').replace(/[\n\r]+/g, ' ').replace(/\s{2,}/g, ' ').trim();
+        return samples.join(' ').replace(/[\n\r]+/g, ' ').replace(/\s{2,}/g, ' ').trim();
     }
 
-    // Summarize Action
-    async function summarize() {
-        const botId = getStored('selectedBotId');
-        const promptId = getStored('selectedPromptId');
-        const allBots = getAllChatbots();
-        const allPrompts = getAllPrompts();
-        const bot = allBots[botId];
-        const prompt = allPrompts.find(p => p.id === promptId);
+    function showToast(message) {
+        const existingToast = document.getElementById('jsTLDR-toast');
+        if (existingToast) {
+            existingToast.remove();
+        }
 
-        if (!bot || !prompt) {
-            alert('Please select a valid chatbot and prompt');
+        const toast = document.createElement('div');
+        toast.id = 'jsTLDR-toast';
+        toast.textContent = message;
+        document.body.appendChild(toast);
+
+        setTimeout(() => {
+            toast.classList.add('jsTLDR-show');
+        }, 10);
+
+        setTimeout(() => {
+            toast.classList.remove('jsTLDR-show');
+            setTimeout(() => {
+                if (toast.parentElement) {
+                    toast.parentElement.removeChild(toast);
+                }
+            }, 300);
+        }, 2000);
+    }
+
+    // --- UPDATED SUMMARIZE FUNCTIONS ---
+
+    async function summarize() {
+        if (isBusy) {
+            showToast("Busy processing...");
             return;
         }
 
-        const raw = await extractPageContent();
-        const truncRaw = bot.characterLimit ? truncateText(raw, { characterLimit: bot.characterLimit }) : raw;
-        const fullText = `${prompt.content}\n\nPage Content: ${truncRaw}`;
-        const final = bot.characterLimit ? truncateText(fullText, { characterLimit: bot.characterLimit }) : fullText;
-        GM_setClipboard(final);
-        window.open(bot.url, '_blank');
+        const promptId = getStored('selectedPromptId');
+        const allPrompts = getAllPrompts();
+        const prompt = allPrompts.find(p => p.id === promptId);
+        if (!prompt) {
+            alert('Please select a valid prompt');
+            return;
+        }
+        await executeSummary(prompt.content);
     }
 
-    // UI State
-    let menuHideTimeout = null;
-    let lastTapTime = 0;
+    async function executeSummary(promptContent) {
+        const botId = getStored('selectedBotId');
+        const allBots = getAllChatbots();
+        const bot = allBots[botId];
 
-    // Create UI
+        if (!bot) {
+            alert('Please select a valid chatbot');
+            return;
+        }
+
+        // Set Busy State & UI Feedback
+        isBusy = true;
+        const originalIcon = mainButton.innerHTML;
+        mainButton.innerHTML = '<span style="animation: spin 1s linear infinite; display: inline-block;">⏳</span>';
+
+        try {
+            showToast("Extracting page content...");
+            await new Promise(r => setTimeout(r, 50)); // Allow UI update
+
+            const raw = await extractPageContent();
+            const maxContentLength = (bot.characterLimit || 20000) - promptContent.length - 20;
+            const truncRaw = truncateText(raw, { characterLimit: maxContentLength });
+
+            const fullText = `${promptContent}\n\n---\n\nPage Content:\n${truncRaw}`;
+            GM_setClipboard(fullText);
+            showToast("Copied to clipboard!");
+            window.open(bot.url, '_blank');
+        } catch (e) {
+            console.error(e);
+            showToast("Error during summary.");
+        } finally {
+            isBusy = false;
+            mainButton.innerHTML = originalIcon;
+        }
+    }
+
     const container = document.createElement('div');
     container.id = 'jsTLDR-container';
+    container.style.bottom = getStored('buttonBottom', '80px');
 
     const mainButton = document.createElement('button');
     mainButton.id = 'jsTLDR-main-button';
@@ -516,7 +733,6 @@
     const popupMenu = document.createElement('div');
     popupMenu.className = 'jsTLDR-popup-menu';
 
-    // Show/hide menu with delay
     function showMenu() {
         if (menuHideTimeout) {
             clearTimeout(menuHideTimeout);
@@ -531,42 +747,123 @@
         }, 300);
     }
 
-    // Desktop hover
-    mainButton.addEventListener('mouseenter', showMenu);
-    mainButton.addEventListener('mouseleave', hideMenuWithDelay);
-    popupMenu.addEventListener('mouseenter', showMenu);
-    popupMenu.addEventListener('mouseleave', hideMenuWithDelay);
+    // --- FIXED DRAG & TAP LOGIC FOR CHROMIUM ---
 
-    // Desktop click
-    mainButton.addEventListener('click', (e) => {
-        e.preventDefault();
-        summarize();
-    });
+    let isDragging = false;
+    let hasMoved = false;
+    let startY;
+    let startBottom;
+    let menuHideTimeout = null;
+    let lastTapTime = 0;
 
-    // Mobile tap (single = show menu, double = summarize)
-    mainButton.addEventListener('touchstart', (e) => {
-        e.preventDefault();
+    // Prevent default context menu
+    mainButton.addEventListener('contextmenu', (e) => e.preventDefault());
+
+    const dragStart = (e) => {
+        // Only allow left click or touch
+        if (e.type === 'mousedown' && e.button !== 0) return;
+
+        isDragging = true;
+        hasMoved = false; // Reset move flag
+
+        startY = (e.type === 'touchstart') ? e.touches[0].clientY : e.clientY;
+        startBottom = parseInt(container.style.bottom, 10);
+        mainButton.style.cursor = 'grabbing';
+        mainButton.style.transition = 'none';
+
+        if (e.type === 'touchstart') {
+            document.addEventListener('touchmove', dragMove, { passive: false });
+            document.addEventListener('touchend', dragEnd);
+            document.addEventListener('touchcancel', dragEnd);
+        } else {
+            document.addEventListener('mousemove', dragMove);
+            document.addEventListener('mouseup', dragEnd);
+        }
+    };
+
+    const dragMove = (e) => {
+        if (!isDragging) return;
+
+        const currentY = (e.type === 'touchmove') ? e.touches[0].clientY : e.clientY;
+        const diffY = startY - currentY;
+
+        // Chromium Fix: Movement Threshold (>5px)
+        if (!hasMoved && Math.abs(diffY) < 5) {
+            return;
+        }
+
+        hasMoved = true;
+        if (e.cancelable) e.preventDefault();
+
+        let newBottom = startBottom + diffY;
+        const maxBottom = window.innerHeight - container.offsetHeight - 10;
+        if (newBottom < 10) newBottom = 10;
+        if (newBottom > maxBottom) newBottom = maxBottom;
+
+        container.style.bottom = `${newBottom}px`;
+    };
+
+    const dragEnd = (e) => {
+        if (!isDragging) return;
+        isDragging = false;
+
+        mainButton.style.cursor = 'grab';
+        mainButton.style.transition = 'all 0.2s';
+
+        document.removeEventListener('mousemove', dragMove);
+        document.removeEventListener('mouseup', dragEnd);
+        document.removeEventListener('touchmove', dragMove);
+        document.removeEventListener('touchend', dragEnd);
+        document.removeEventListener('touchcancel', dragEnd);
+
+        setStored('buttonBottom', container.style.bottom);
+
+        // Logic Split: Tap vs Drag
+        if (!hasMoved) {
+            handleTap(e);
+        }
+    };
+
+    const handleTap = (e) => {
+        if (e.type === 'touchend') {
+            e.preventDefault();
+        }
+
         const now = Date.now();
         const timeSinceLastTap = now - lastTapTime;
 
-        if (timeSinceLastTap < 300 && timeSinceLastTap > 0) {
-            // Double tap
+        if (timeSinceLastTap < 400 && timeSinceLastTap > 0) {
+            // DOUBLE TAP
             summarize();
+            lastTapTime = 0;
         } else {
-            // Single tap
+            // SINGLE TAP
             if (popupMenu.classList.contains('jsTLDR-show')) {
                 popupMenu.classList.remove('jsTLDR-show');
             } else {
                 showMenu();
             }
+            lastTapTime = now;
         }
-        lastTapTime = now;
-    });
+    };
 
-    // Bot Dropdown
+    // Attach Unified Listeners
+    mainButton.addEventListener('mousedown', dragStart);
+    mainButton.addEventListener('touchstart', dragStart, { passive: false });
+
+    // Menu Hover Listeners (Desktop)
+    mainButton.addEventListener('mouseenter', showMenu);
+    mainButton.addEventListener('mouseleave', hideMenuWithDelay);
+    popupMenu.addEventListener('mouseenter', showMenu);
+    popupMenu.addEventListener('mouseleave', hideMenuWithDelay);
+
+
+    // --- DROPDOWN & MENU COMPONENTS ---
+
     const botBtn = document.createElement('button');
     botBtn.className = 'jsTLDR-menu-button';
     botBtn.innerHTML = '🤖';
+    botBtn.title = 'Select Chatbot';
     const botDropdown = document.createElement('div');
     botDropdown.className = 'jsTLDR-dropdown';
     botDropdown.id = 'jsTLDR-bot-dropdown';
@@ -575,7 +872,6 @@
         botDropdown.innerHTML = '';
         const allBots = getAllChatbots();
         const selectedId = getStored('selectedBotId');
-
         Object.values(allBots).forEach(bot => {
             const item = document.createElement('button');
             item.className = 'jsTLDR-dropdown-item';
@@ -599,10 +895,10 @@
         renderBotDropdown();
     };
 
-    // Prompt Dropdown
     const promptBtn = document.createElement('button');
     promptBtn.className = 'jsTLDR-menu-button';
     promptBtn.innerHTML = '📝';
+    promptBtn.title = 'Select Prompt';
     const promptDropdown = document.createElement('div');
     promptDropdown.className = 'jsTLDR-dropdown';
     promptDropdown.id = 'jsTLDR-prompt-dropdown';
@@ -611,7 +907,6 @@
         promptDropdown.innerHTML = '';
         const allPrompts = getAllPrompts();
         const selectedId = getStored('selectedPromptId');
-
         allPrompts.forEach(prompt => {
             const item = document.createElement('button');
             item.className = 'jsTLDR-dropdown-item';
@@ -635,36 +930,105 @@
         renderPromptDropdown();
     };
 
-    // Settings Modal
-    const modalOverlay = document.createElement('div');
-    modalOverlay.className = 'jsTLDR-modal-overlay';
+    const customPromptBtn = document.createElement('button');
+    customPromptBtn.className = 'jsTLDR-menu-button';
+    customPromptBtn.innerHTML = '❓';
+    customPromptBtn.title = 'Ask a custom question';
 
-    const modal = document.createElement('div');
-    modal.className = 'jsTLDR-modal';
+    const customPromptModalOverlay = document.createElement('div');
+    customPromptModalOverlay.className = 'jsTLDR-modal-overlay';
+    customPromptModalOverlay.id = 'jsTLDR-custom-prompt-modal-overlay';
 
-    modalOverlay.appendChild(modal);
+    function showCustomPromptModal() {
+        customPromptModalOverlay.innerHTML = `
+            <div class="jsTLDR-modal">
+                <div class="jsTLDR-modal-header">
+                    <h2 class="jsTLDR-modal-title">Custom Question</h2>
+                    <button class="jsTLDR-modal-close" id="jsTLDR-custom-prompt-close">×</button>
+                </div>
+                <div class="jsTLDR-modal-body" id="jsTLDR-custom-prompt-modal-body">
+                    <label for="jsTLDR-custom-prompt-textarea" class="jsTLDR-label">Enter your question or prompt below:</label>
+                    <textarea id="jsTLDR-custom-prompt-textarea" class="jsTLDR-textarea" placeholder="e.g., Explain this to me like I'm five..."></textarea>
+                </div>
+                <div id="jsTLDR-custom-prompt-modal-footer">
+                     <button class="jsTLDR-button jsTLDR-button-secondary" id="jsTLDR-custom-prompt-cancel">Cancel</button>
+                     <button class="jsTLDR-button" id="jsTLDR-custom-prompt-submit">Submit</button>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(customPromptModalOverlay);
+        customPromptModalOverlay.classList.add('jsTLDR-show');
 
-    function closeModal() {
-        modalOverlay.classList.remove('jsTLDR-show');
+        const closeModal = () => customPromptModalOverlay.classList.remove('jsTLDR-show');
+
+        customPromptModalOverlay.querySelector('#jsTLDR-custom-prompt-close').onclick = closeModal;
+        customPromptModalOverlay.querySelector('#jsTLDR-custom-prompt-cancel').onclick = closeModal;
+        customPromptModalOverlay.onclick = (e) => {
+            if (e.target === customPromptModalOverlay) closeModal();
+        };
+
+        customPromptModalOverlay.querySelector('#jsTLDR-custom-prompt-submit').onclick = async () => {
+            const promptText = customPromptModalOverlay.querySelector('#jsTLDR-custom-prompt-textarea').value;
+            if (promptText && promptText.trim()) {
+                await executeSummary(promptText.trim());
+                closeModal();
+            } else {
+                alert("Please enter a prompt.");
+            }
+        };
+
+        setTimeout(() => {
+            customPromptModalOverlay.querySelector('#jsTLDR-custom-prompt-textarea').focus();
+        }, 100);
     }
 
-    modalOverlay.onclick = (e) => {
-        if (e.target === modalOverlay) closeModal();
+    customPromptBtn.onclick = (e) => {
+        e.stopPropagation();
+        popupMenu.classList.remove('jsTLDR-show');
+        showCustomPromptModal();
     };
 
-    function renderModal() {
-        modal.innerHTML = `
+    const settingsBtn = document.createElement('button');
+    settingsBtn.className = 'jsTLDR-menu-button';
+    settingsBtn.innerHTML = '⚙️';
+    settingsBtn.title = 'Settings';
+    const settingsModalOverlay = document.createElement('div');
+    settingsModalOverlay.className = 'jsTLDR-modal-overlay';
+    settingsModalOverlay.id = 'jsTLDR-settings-modal-overlay';
+    const settingsModal = document.createElement('div');
+    settingsModal.className = 'jsTLDR-modal';
+    settingsModalOverlay.appendChild(settingsModal);
+
+    function closeSettingsModal() {
+        settingsModalOverlay.classList.remove('jsTLDR-show');
+    }
+
+    settingsModalOverlay.onclick = (e) => {
+        if (e.target === settingsModalOverlay) closeSettingsModal();
+    };
+
+    settingsBtn.onclick = (e) => {
+        e.stopPropagation();
+        renderSettingsModal();
+        settingsModalOverlay.classList.add('jsTLDR-show');
+        popupMenu.classList.remove('jsTLDR-show');
+    };
+
+    function renderSettingsModal() {
+        settingsModal.innerHTML = `
             <div class="jsTLDR-modal-header">
                 <h2 class="jsTLDR-modal-title">Settings</h2>
                 <button class="jsTLDR-modal-close">×</button>
             </div>
             <div class="jsTLDR-modal-body">
                 <div class="jsTLDR-tabs">
-                    <button class="jsTLDR-tab jsTLDR-active" data-tab="prompts">Custom Prompts</button>
+                    <button class="jsTLDR-tab jsTLDR-active" data-tab="general">General</button>
+                    <button class="jsTLDR-tab" data-tab="prompts">Custom Prompts</button>
                     <button class="jsTLDR-tab" data-tab="chatbots">Custom Chatbots</button>
                     <button class="jsTLDR-tab" data-tab="exclusions">Site Exclusions</button>
                 </div>
-                <div class="jsTLDR-tab-content jsTLDR-active" data-content="prompts">
+                <div class="jsTLDR-tab-content jsTLDR-active" data-content="general"></div>
+                <div class="jsTLDR-tab-content" data-content="prompts">
                     <div id="jsTLDR-prompts-list"></div>
                     <button class="jsTLDR-button" id="jsTLDR-add-prompt">+ Add Prompt</button>
                 </div>
@@ -679,41 +1043,155 @@
             </div>
         `;
 
-        // Tab switching
-        modal.querySelectorAll('.jsTLDR-tab').forEach(tab => {
+        settingsModal.querySelectorAll('.jsTLDR-tab').forEach(tab => {
             tab.onclick = () => {
-                modal.querySelectorAll('.jsTLDR-tab').forEach(t => t.classList.remove('jsTLDR-active'));
-                modal.querySelectorAll('.jsTLDR-tab-content').forEach(c => c.classList.remove('jsTLDR-active'));
+                settingsModal.querySelectorAll('.jsTLDR-tab, .jsTLDR-tab-content').forEach(el => el.classList.remove('jsTLDR-active'));
                 tab.classList.add('jsTLDR-active');
-                modal.querySelector(`[data-content="${tab.dataset.tab}"]`).classList.add('jsTLDR-active');
+                settingsModal.querySelector(`[data-content="${tab.dataset.tab}"]`).classList.add('jsTLDR-active');
             };
         });
 
-        modal.querySelector('.jsTLDR-modal-close').onclick = closeModal;
+        settingsModal.querySelector('.jsTLDR-modal-close').onclick = closeSettingsModal;
+        renderGeneralSettings(settingsModal);
+        renderPromptsList(settingsModal);
+        renderChatbotsList(settingsModal);
+        renderExclusionsList(settingsModal);
 
-        renderPromptsList();
-        renderChatbotsList();
-        renderExclusionsList();
-
-        // Add prompt handler
-        modal.querySelector('#jsTLDR-add-prompt').onclick = () => showPromptForm();
-        modal.querySelector('#jsTLDR-add-chatbot').onclick = () => showChatbotForm();
-        modal.querySelector('#jsTLDR-add-exclusion').onclick = () => {
+        settingsModal.querySelector('#jsTLDR-add-prompt').onclick = () => showPromptForm();
+        settingsModal.querySelector('#jsTLDR-add-chatbot').onclick = () => showChatbotForm();
+        settingsModal.querySelector('#jsTLDR-add-exclusion').onclick = () => {
             const site = window.location.hostname.replace(/^www\./, '');
             const exclusions = getStored('excludedSites', []);
             if (!exclusions.includes(site)) {
                 setStored('excludedSites', [...exclusions, site]);
-                renderExclusionsList();
+                renderExclusionsList(settingsModal);
+                container.style.display = 'none';
             }
         };
     }
 
-    function renderPromptsList() {
+    function renderGeneralSettings(modal) {
+        const container = modal.querySelector('[data-content="general"]');
+        const useReadability = getStored('useReadability', false);
+
+        container.innerHTML = `
+            <div class="jsTLDR-setting-row">
+                <div>
+                    <div class="jsTLDR-setting-label">Advanced Content Extraction</div>
+                    <div class="jsTLDR-setting-desc">Uses Mozilla's Readability library for cleaner article text.</div>
+                </div>
+                <label class="jsTLDR-switch">
+                    <input type="checkbox" id="jsTLDR-readability-toggle" ${useReadability ? 'checked' : ''}>
+                    <span class="jsTLDR-slider"></span>
+                </label>
+            </div>
+        `;
+
+        container.querySelector('#jsTLDR-readability-toggle').addEventListener('change', (e) => {
+            setStored('useReadability', e.target.checked);
+        });
+    }
+
+    function showPromptForm(promptToEdit = null, index = -1) {
+        const isEditing = promptToEdit !== null;
+        const modalBody = settingsModal.querySelector('.jsTLDR-modal-body');
+
+        modalBody.innerHTML = `
+            <h3 style="color: ${isDarkMode() ? '#fff' : '#000'}; margin-top: 0; margin-bottom: 20px;">${isEditing ? 'Edit' : 'Add'} Custom Prompt</h3>
+            <form id="jsTLDR-prompt-form">
+                 <div class="jsTLDR-form-group">
+                     <label class="jsTLDR-label" for="jsTLDR-prompt-name">Prompt Name</label>
+                     <input type="text" id="jsTLDR-prompt-name" class="jsTLDR-input" required value="${isEditing ? promptToEdit.name.replace(/"/g, '&quot;') : ''}">
+                 </div>
+                 <div class="jsTLDR-form-group">
+                     <label class="jsTLDR-label" for="jsTLDR-prompt-content">Prompt Content</label>
+                     <textarea id="jsTLDR-prompt-content" class="jsTLDR-textarea" required>${isEditing ? promptToEdit.content : ''}</textarea>
+                 </div>
+                 <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px;">
+                     <button type="button" class="jsTLDR-button jsTLDR-button-secondary" id="jsTLDR-cancel-prompt">Cancel</button>
+                     <button type="submit" class="jsTLDR-button">Save Prompt</button>
+                 </div>
+            </form>
+        `;
+
+        modalBody.querySelector('#jsTLDR-cancel-prompt').onclick = () => renderSettingsModal();
+
+        modalBody.querySelector('#jsTLDR-prompt-form').onsubmit = (e) => {
+            e.preventDefault();
+            const name = modalBody.querySelector('#jsTLDR-prompt-name').value;
+            const content = modalBody.querySelector('#jsTLDR-prompt-content').value;
+            if (!name.trim() || !content.trim()) return;
+
+            const customPrompts = getStored('customPrompts', []);
+            const newPrompt = { id: `custom-${Date.now()}`, name, content };
+
+            if (isEditing) {
+                customPrompts[index] = newPrompt;
+            } else {
+                customPrompts.push(newPrompt);
+            }
+            setStored('customPrompts', customPrompts);
+            renderSettingsModal();
+            renderPromptDropdown();
+        };
+    }
+
+    function showChatbotForm(botToEdit = null) {
+        const isEditing = botToEdit !== null;
+        const modalBody = settingsModal.querySelector('.jsTLDR-modal-body');
+
+        modalBody.innerHTML = `
+            <h3 style="color: ${isDarkMode() ? '#fff' : '#000'}; margin-top: 0; margin-bottom: 20px;">${isEditing ? 'Edit' : 'Add'} Custom Chatbot</h3>
+            <form id="jsTLDR-chatbot-form">
+                 <div class="jsTLDR-form-group">
+                     <label class="jsTLDR-label" for="jsTLDR-bot-name">Chatbot Name</label>
+                     <input type="text" id="jsTLDR-bot-name" class="jsTLDR-input" required value="${isEditing ? botToEdit.name.replace(/"/g, '&quot;') : ''}">
+                 </div>
+                 <div class="jsTLDR-form-group">
+                     <label class="jsTLDR-label" for="jsTLDR-bot-url">URL</label>
+                     <input type="url" id="jsTLDR-bot-url" class="jsTLDR-input" required value="${isEditing ? botToEdit.url.replace(/"/g, '&quot;') : ''}">
+                 </div>
+                 <div class="jsTLDR-form-group">
+                     <label class="jsTLDR-label" for="jsTLDR-bot-limit">Character Limit (optional)</label>
+                     <input type="number" id="jsTLDR-bot-limit" class="jsTLDR-input" placeholder="e.g., 40000" value="${isEditing && botToEdit.characterLimit ? botToEdit.characterLimit : ''}">
+                 </div>
+                 <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px;">
+                     <button type="button" class="jsTLDR-button jsTLDR-button-secondary" id="jsTLDR-cancel-bot">Cancel</button>
+                     <button type="submit" class="jsTLDR-button">Save Chatbot</button>
+                 </div>
+            </form>
+        `;
+
+        modalBody.querySelector('#jsTLDR-cancel-bot').onclick = () => renderSettingsModal();
+
+        modalBody.querySelector('#jsTLDR-chatbot-form').onsubmit = (e) => {
+            e.preventDefault();
+            const name = modalBody.querySelector('#jsTLDR-bot-name').value;
+            const url = modalBody.querySelector('#jsTLDR-bot-url').value;
+            const limit = modalBody.querySelector('#jsTLDR-bot-limit').value;
+            if (!name.trim() || !url.trim()) return;
+
+            const customBots = getStored('customChatbots', {});
+            const botId = isEditing ? botToEdit.id : `custom-${Date.now()}`;
+            customBots[botId] = {
+                id: botId,
+                name: name,
+                url: url,
+                characterLimit: parseInt(limit) || 20000
+            };
+
+            setStored('customChatbots', customBots);
+            renderSettingsModal();
+            renderBotDropdown();
+        };
+    }
+
+    function renderPromptsList(modal) {
         const container = modal.querySelector('#jsTLDR-prompts-list');
         const customPrompts = getStored('customPrompts', []);
 
         if (customPrompts.length === 0) {
-            container.innerHTML = '<p style="color: #999; text-align: center; padding: 20px;">No custom prompts yet</p>';
+            container.innerHTML = '<p style="color: #999; text-align: center; padding: 20px 0;">No custom prompts yet.</p>';
             return;
         }
 
@@ -734,7 +1212,6 @@
             container.appendChild(item);
         });
 
-        // Attach handlers
         container.querySelectorAll('[data-action="edit"]').forEach(btn => {
             btn.onclick = () => {
                 const index = parseInt(btn.dataset.index);
@@ -744,81 +1221,22 @@
 
         container.querySelectorAll('[data-action="delete"]').forEach(btn => {
             btn.onclick = () => {
-                if (confirm('Delete this prompt?')) {
-                    const index = parseInt(btn.dataset.index);
-                    customPrompts.splice(index, 1);
-                    setStored('customPrompts', customPrompts);
-                    renderPromptsList();
-                    renderPromptDropdown();
-                }
+                const index = parseInt(btn.dataset.index);
+                const prompts = getStored('customPrompts', []);
+                prompts.splice(index, 1);
+                setStored('customPrompts', prompts);
+                renderPromptsList(modal);
+                renderPromptDropdown();
             };
         });
     }
 
-    function showPromptForm(existingPrompt = null, editIndex = null) {
-        const formHtml = `
-            <div style="margin-top: 20px; padding: 20px; background: ${isDarkMode() ? '#2a2a2a' : '#f5f5f5'}; border-radius: 8px;">
-                <h3 style="margin-top: 0; color: ${isDarkMode() ? '#fff' : '#000'};">${existingPrompt ? 'Edit' : 'Add'} Prompt</h3>
-                <div class="jsTLDR-form-group">
-                    <label class="jsTLDR-label">Name</label>
-                    <input type="text" class="jsTLDR-input" id="jsTLDR-prompt-name" value="${existingPrompt ? existingPrompt.name : ''}" placeholder="e.g., Quick Summary">
-                </div>
-                <div class="jsTLDR-form-group">
-                    <label class="jsTLDR-label">Content</label>
-                    <textarea class="jsTLDR-textarea" id="jsTLDR-prompt-content" placeholder="Enter your prompt instructions...">${existingPrompt ? existingPrompt.content : ''}</textarea>
-                </div>
-                <div style="display: flex; gap: 8px;">
-                    <button class="jsTLDR-button" id="jsTLDR-save-prompt">Save</button>
-                    <button class="jsTLDR-button jsTLDR-button-secondary" id="jsTLDR-cancel-prompt">Cancel</button>
-                </div>
-            </div>
-        `;
-
-        const container = modal.querySelector('#jsTLDR-prompts-list');
-        container.insertAdjacentHTML('afterend', formHtml);
-        modal.querySelector('#jsTLDR-add-prompt').style.display = 'none';
-
-        modal.querySelector('#jsTLDR-save-prompt').onclick = () => {
-            const name = modal.querySelector('#jsTLDR-prompt-name').value.trim();
-            const content = modal.querySelector('#jsTLDR-prompt-content').value.trim();
-
-            if (!name || !content) {
-                alert('Please fill in all fields');
-                return;
-            }
-
-            const customPrompts = getStored('customPrompts', []);
-            const newPrompt = {
-                id: existingPrompt ? existingPrompt.id : `custom_${Date.now()}`,
-                name,
-                content
-            };
-
-            if (editIndex !== null) {
-                customPrompts[editIndex] = newPrompt;
-            } else {
-                customPrompts.push(newPrompt);
-            }
-
-            setStored('customPrompts', customPrompts);
-            modal.querySelector('#jsTLDR-add-prompt').style.display = 'block';
-            modal.querySelector('#jsTLDR-add-prompt').previousElementSibling.remove();
-            renderPromptsList();
-            renderPromptDropdown();
-        };
-
-        modal.querySelector('#jsTLDR-cancel-prompt').onclick = () => {
-            modal.querySelector('#jsTLDR-add-prompt').style.display = 'block';
-            modal.querySelector('#jsTLDR-add-prompt').previousElementSibling.remove();
-        };
-    }
-
-    function renderChatbotsList() {
+    function renderChatbotsList(modal) {
         const container = modal.querySelector('#jsTLDR-chatbots-list');
         const customChatbots = getStored('customChatbots', {});
 
         if (Object.keys(customChatbots).length === 0) {
-            container.innerHTML = '<p style="color: #999; text-align: center; padding: 20px;">No custom chatbots yet</p>';
+            container.innerHTML = '<p style="color: #999; text-align: center; padding: 20px 0;">No custom chatbots yet.</p>';
             return;
         }
 
@@ -841,91 +1259,29 @@
 
         container.querySelectorAll('[data-action="edit"]').forEach(btn => {
             btn.onclick = () => {
-                const bot = customChatbots[btn.dataset.id];
-                showChatbotForm(bot);
+                const botId = btn.dataset.id;
+                showChatbotForm(customChatbots[botId]);
             };
         });
 
         container.querySelectorAll('[data-action="delete"]').forEach(btn => {
             btn.onclick = () => {
-                if (confirm('Delete this chatbot?')) {
-                    const bots = getStored('customChatbots', {});
-                    delete bots[btn.dataset.id];
-                    setStored('customChatbots', bots);
-                    renderChatbotsList();
-                    renderBotDropdown();
-                }
+                const botId = btn.dataset.id;
+                const bots = getStored('customChatbots', {});
+                delete bots[botId];
+                setStored('customChatbots', bots);
+                renderChatbotsList(modal);
+                renderBotDropdown();
             };
         });
     }
 
-    function showChatbotForm(existingBot = null) {
-        const formHtml = `
-            <div style="margin-top: 20px; padding: 20px; background: ${isDarkMode() ? '#2a2a2a' : '#f5f5f5'}; border-radius: 8px;">
-                <h3 style="margin-top: 0; color: ${isDarkMode() ? '#fff' : '#000'};">${existingBot ? 'Edit' : 'Add'} Chatbot</h3>
-                <div class="jsTLDR-form-group">
-                    <label class="jsTLDR-label">Name</label>
-                    <input type="text" class="jsTLDR-input" id="jsTLDR-bot-name" value="${existingBot ? existingBot.name : ''}" placeholder="e.g., My Custom Bot">
-                </div>
-                <div class="jsTLDR-form-group">
-                    <label class="jsTLDR-label">URL</label>
-                    <input type="text" class="jsTLDR-input" id="jsTLDR-bot-url" value="${existingBot ? existingBot.url : ''}" placeholder="https://...">
-                </div>
-                <div class="jsTLDR-form-group">
-                    <label class="jsTLDR-label">Character Limit (optional)</label>
-                    <input type="number" class="jsTLDR-input" id="jsTLDR-bot-limit" value="${existingBot ? existingBot.characterLimit || '' : ''}" placeholder="e.g., 50000">
-                </div>
-                <div style="display: flex; gap: 8px;">
-                    <button class="jsTLDR-button" id="jsTLDR-save-bot">Save</button>
-                    <button class="jsTLDR-button jsTLDR-button-secondary" id="jsTLDR-cancel-bot">Cancel</button>
-                </div>
-            </div>
-        `;
-
-        const container = modal.querySelector('#jsTLDR-chatbots-list');
-        container.insertAdjacentHTML('afterend', formHtml);
-        modal.querySelector('#jsTLDR-add-chatbot').style.display = 'none';
-
-        modal.querySelector('#jsTLDR-save-bot').onclick = () => {
-            const name = modal.querySelector('#jsTLDR-bot-name').value.trim();
-            const url = modal.querySelector('#jsTLDR-bot-url').value.trim();
-            const limit = modal.querySelector('#jsTLDR-bot-limit').value.trim();
-
-            if (!name || !url) {
-                alert('Please fill in name and URL');
-                return;
-            }
-
-            const customBots = getStored('customChatbots', {});
-            const botId = existingBot ? existingBot.id : `custom_${Date.now()}`;
-
-            customBots[botId] = {
-                id: botId,
-                name,
-                url,
-                characterLimit: limit ? parseInt(limit) : 50000,
-                premiumCharacterLimit: limit ? parseInt(limit) : 50000
-            };
-
-            setStored('customChatbots', customBots);
-            modal.querySelector('#jsTLDR-add-chatbot').style.display = 'block';
-            modal.querySelector('#jsTLDR-add-chatbot').previousElementSibling.remove();
-            renderChatbotsList();
-            renderBotDropdown();
-        };
-
-        modal.querySelector('#jsTLDR-cancel-bot').onclick = () => {
-            modal.querySelector('#jsTLDR-add-chatbot').style.display = 'block';
-            modal.querySelector('#jsTLDR-add-chatbot').previousElementSibling.remove();
-        };
-    }
-
-    function renderExclusionsList() {
+    function renderExclusionsList(modal) {
         const container = modal.querySelector('#jsTLDR-exclusions-list');
         const exclusions = getStored('excludedSites', []);
 
         if (exclusions.length === 0) {
-            container.innerHTML = '<p style="color: #999; text-align: center; padding: 20px;">No excluded sites</p>';
+            container.innerHTML = '<p style="color: #999; text-align: center; padding: 20px 0;">No excluded sites yet.</p>';
             return;
         }
 
@@ -934,12 +1290,12 @@
             const item = document.createElement('div');
             item.className = 'jsTLDR-list-item';
             item.innerHTML = `
-                <div class="jsTLDR-list-item-content">
-                    <div class="jsTLDR-list-item-title">${site}</div>
-                </div>
-                <div class="jsTLDR-list-item-actions">
-                    <button class="jsTLDR-icon-button jsTLDR-danger" data-action="delete" data-index="${index}">🗑️</button>
-                </div>
+                 <div class="jsTLDR-list-item-content">
+                     <div class="jsTLDR-list-item-title">${site}</div>
+                 </div>
+                 <div class="jsTLDR-list-item-actions">
+                     <button class="jsTLDR-icon-button jsTLDR-danger" data-action="delete" data-index="${index}">🗑️</button>
+                 </div>
             `;
             container.appendChild(item);
         });
@@ -947,57 +1303,43 @@
         container.querySelectorAll('[data-action="delete"]').forEach(btn => {
             btn.onclick = () => {
                 const index = parseInt(btn.dataset.index);
-                exclusions.splice(index, 1);
-                setStored('excludedSites', exclusions);
-                renderExclusionsList();
+                const sites = getStored('excludedSites', []);
+                const removedSite = sites.splice(index, 1)[0];
+                setStored('excludedSites', sites);
+                renderExclusionsList(modal);
+
+                const currentSite = window.location.hostname.replace(/^www\./, '');
+                if (removedSite === currentSite) {
+                    document.querySelector('#jsTLDR-container').style.display = 'block';
+                }
             };
         });
     }
 
-    // Settings Button
-    const settingsBtn = document.createElement('button');
-    settingsBtn.className = 'jsTLDR-menu-button';
-    settingsBtn.innerHTML = '⚙️';
-    settingsBtn.onclick = (e) => {
-        e.stopPropagation();
-        renderModal();
-        modalOverlay.classList.add('jsTLDR-show');
-        popupMenu.classList.remove('jsTLDR-show');
-    };
-
-    // Assemble UI
     popupMenu.appendChild(botBtn);
-    popupMenu.appendChild(botDropdown);
     popupMenu.appendChild(promptBtn);
-    popupMenu.appendChild(promptDropdown);
+    popupMenu.appendChild(customPromptBtn);
     popupMenu.appendChild(settingsBtn);
-
     container.appendChild(mainButton);
     container.appendChild(popupMenu);
-
+    container.appendChild(botDropdown);
+    container.appendChild(promptDropdown);
     document.body.appendChild(container);
-    document.body.appendChild(modalOverlay);
+    document.body.appendChild(settingsModalOverlay);
 
-    // Close dropdowns when clicking outside
     document.addEventListener('click', (e) => {
-        if (!e.target.closest('#jsTLDR-container')) {
+        if (!botDropdown.contains(e.target) && !botBtn.contains(e.target)) {
             botDropdown.classList.remove('jsTLDR-show');
+        }
+        if (!promptDropdown.contains(e.target) && !promptBtn.contains(e.target)) {
             promptDropdown.classList.remove('jsTLDR-show');
         }
     });
 
-    // Hotkey (Ctrl+J)
-    document.addEventListener('keydown', e => {
-        if (e.ctrlKey && e.key === 'j') {
-            e.preventDefault();
-            summarize();
-        }
-    });
-
-    // Check if current site is excluded
-    const currentSite = window.location.hostname.replace(/^www\./, '');
     const excludedSites = getStored('excludedSites', []);
+    const currentSite = window.location.hostname.replace(/^www\./, '');
     if (excludedSites.includes(currentSite)) {
-        container.remove();
+        container.style.display = 'none';
     }
+
 })();
